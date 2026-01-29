@@ -1,68 +1,73 @@
 import streamlit as st
-import joblib
+import pickle
 import pandas as pd
+import numpy as np
+import warnings
 import os
 
-# --- FILE PATH DEBUGGING ---
-# This helps if the app says "model.pkl not found"
-current_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(current_dir, 'model.pkl')
+# Suppress sklearn version warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
-st.set_page_config(page_title="Bridge Assessment", layout="centered")
-
-# 1. Direct Load with Path Check
-if not os.path.exists(model_path):
-    st.error(f"❌ Error: 'model.pkl' not found at {model_path}")
-    st.info(f"Files currently in folder: {os.listdir(current_dir)}")
-    model = None
-else:
+@st.cache_resource
+def load_model():
     try:
-        # Load using joblib
-        model = joblib.load(model_path)
+        if not os.path.exists('model.pkl'):
+            st.error("❌ model.pkl not found in repo root")
+            st.info("Upload model.pkl via GitHub or drag-drop to Space")
+            return None
+            
+        with open('model.pkl', 'rb') as f:
+            model = pickle.load(f)
+        st.success("✅ Model loaded successfully")
+        return model
     except Exception as e:
-        st.error(f"❌ Version Error: {e}")
-        st.info("Your model was likely made with an older scikit-learn. Try training it again with the latest version.")
-        model = None
+        st.error(f"❌ Model load failed: {str(e)[:200]}...")
+        st.info("💡 Retrain model with scikit-learn==1.6.1 or use joblib.dump()")
+        return None
 
-# 2. UI Setup
-st.title("🌉 Bridge Condition Predictor")
+# Load model first
+model = load_model()
+if model is None:
+    st.stop()
 
-with st.form("bridge_form"):
-    st.subheader("Enter Bridge Details")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        age = st.number_input("Age of Bridge (years)", min_value=0, value=10)
-        traffic = st.number_input("Traffic Volume", min_value=0, value=1000)
-    
-    with col2:
-        material = st.selectbox("Material Type", ["Concrete", "Steel"])
-        maintenance = st.selectbox("Maintenance Level", ["No-Maintainance", "Annual", "Bi-Annual"])
-    
-    submit = st.form_submit_button("Predict Condition")
+# UI
+st.set_page_config(page_title="Bridge Condition Predictor", layout="wide")
+st.title("🌉 Bridge Condition Assessment")
+st.markdown("Enter bridge specs below for condition prediction.")
 
-# 3. Encoding & Prediction
-if submit:
-    if model is not None:
-        # Map categories to numbers (Must match your training logic!)
-        material_map = {"Concrete": 0, "Steel": 1}
-        maint_map = {"No-Maintainance": 0, "Annual": 1, "Bi-Annual": 2}
-        
-        input_df = pd.DataFrame([{
+# Inputs
+col1, col2 = st.columns(2)
+with col1:
+    age = st.number_input("Age (years)", 0, 200, 20)
+    traffic = st.number_input("Traffic Volume", 0, 100000, 5000)
+with col2:
+    material = st.selectbox("Material", ["Concrete", "Steel"])
+    maintenance = st.selectbox("Maintenance", ["No-Maintainance", "Annual", "Bi-Annual"])
+
+# Predict
+if st.button("🔍 Analyze Condition", type="primary"):
+    try:
+        input_data = {
             "Age_of_Bridge": age,
             "Traffic_Volume": traffic,
-            "Material_Type": material_map[material],
-            "Maintenance_Level": maint_map[maintenance]
-        }])
-
-        try:
-            prediction = model.predict(input_df)
-            st.divider()
-            if prediction[0] == 0:
-                st.success("### Prediction: Good Condition (0)")
-            else:
-                st.error("### Prediction: Poor Condition (1)")
-        except Exception as e:
-            st.error(f"Prediction Error: {e}")
-    else:
-        st.warning("Prediction disabled because model failed to load.")
+            "Material_Type": material,
+            "Maintenance_Level": maintenance
+        }
+        input_df = pd.DataFrame([input_data])
+        
+        pred = model.predict(input_df)[0]
+        prob = model.predict_proba(input_df)[0] if hasattr(model, 'predict_proba') else None
+        
+        col1, col2 = st.columns([3,1])
+        with col1:
+            status = "🟢 Good Condition" if pred == 0 else "🔴 Poor Condition"
+            st.markdown(f"### **{status}**")
+        with col2:
+            st.metric("Prediction Score", f"{pred}")
+            
+        if prob is not None:
+            st.info(f"**Probabilities:** Good: {prob[0]:.1%} | Poor: {prob[1]:.1%}")
+            
+    except Exception as e:
+        st.error(f"Prediction failed: {str(e)}")
+        st.info("Check if input columns match training data exactly")
