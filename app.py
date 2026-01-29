@@ -12,8 +12,6 @@ def load_model():
     return model
 # Temporary debug code
 
-model = pickle.load(file)
-
 
 # 2. UI Setup
 st.set_page_config(page_title="Bridge Condition Predictor", layout="centered")
