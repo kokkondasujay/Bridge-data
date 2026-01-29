@@ -1,3 +1,4 @@
 streamlit
-scikit-learn
 pandas
+scikit-learn
+# Add xgboost or lightgbm if you used those!
