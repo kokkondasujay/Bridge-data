@@ -11,11 +11,9 @@ def load_model():
         model = pickle.load(file)
     return model
 # Temporary debug code
-try:
-    with open('model.pkl', 'rb') as file:
-        model = pickle.load(file)
-except Exception as e:
-    st.error(f"Actual error: {e}")
+
+model = pickle.load(file)
+
 
 # 2. UI Setup
 st.set_page_config(page_title="Bridge Condition Predictor", layout="centered")
