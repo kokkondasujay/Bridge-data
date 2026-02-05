@@ -1,73 +1,102 @@
 import streamlit as st
-import pickle
 import pandas as pd
 import numpy as np
-import warnings
-import os
+import pickle
 
-# Suppress sklearn version warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="BridgeGuard AI",
+    page_icon="🌉",
+    layout="centered"
+)
 
+# --- PROFESSIONAL CSS STYLING ---
+st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stButton>button { 
+        width: 100%; border-radius: 8px; height: 3.5em; 
+        background-color: #0d6efd; color: white; font-weight: bold;
+        border: none; transition: 0.3s;
+    }
+    .stButton>button:hover { background-color: #0b5ed7; border: none; }
+    .result-card { 
+        padding: 30px; border-radius: 15px; text-align: center; 
+        margin-top: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- LOAD TRAINED MODEL ---
 @st.cache_resource
-def load_model():
-    try:
-        if not os.path.exists('model.pkl'):
-            st.error("❌ model.pkl not found in repo root")
-            st.info("Upload model.pkl via GitHub or drag-drop to Space")
-            return None
-            
-        with open('model.pkl', 'rb') as f:
-            model = pickle.load(f)
-        st.success("✅ Model loaded successfully")
-        return model
-    except Exception as e:
-        st.error(f"❌ Model load failed: {str(e)[:200]}...")
-        st.info("💡 Retrain model with scikit-learn==1.6.1 or use joblib.dump()")
-        return None
+def load_bridge_model():
+    # Ensure model.pkl is in your Hugging Face repo
+    with open("model.pkl", "rb") as f:
+        return pickle.load(f)
 
-# Load model first
-model = load_model()
-if model is None:
-    st.stop()
+model = load_bridge_model()
 
-# UI
-st.set_page_config(page_title="Bridge Condition Predictor", layout="wide")
+# --- HEADER SECTION ---
 st.title("🌉 Bridge Condition Assessment")
-st.markdown("Enter bridge specs below for condition prediction.")
+st.markdown("##### AI-Powered Structural Health Monitoring System")
+st.write("Provide structural parameters to generate a real-time integrity report.")
 
-# Inputs
-col1, col2 = st.columns(2)
-with col1:
-    age = st.number_input("Age (years)", 0, 200, 20)
-    traffic = st.number_input("Traffic Volume", 0, 100000, 5000)
-with col2:
-    material = st.selectbox("Material", ["Concrete", "Steel"])
-    maintenance = st.selectbox("Maintenance", ["No-Maintainance", "Annual", "Bi-Annual"])
+# --- INPUT SECTION ---
+with st.container():
+    st.markdown("### 📝 Infrastructure Details")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        age = st.number_input("📅 Age of Bridge (Years)", min_value=0, max_value=250, value=20)
+        traffic = st.number_input("🚗 Daily Traffic Volume", min_value=0, value=5000)
+    
+    with col2:
+        # Match these options exactly to your bridge.ipynb training labels
+        material = st.selectbox("🏗️ Material Type", ["Concrete", "Steel"])
+        maintenance = st.selectbox("🛠️ Maintenance Level", ["Annual", "Bi-Annual", "No-Maintainance"])
 
-# Predict
-if st.button("🔍 Analyze Condition", type="primary"):
+# --- PREDICTION LOGIC ---
+if st.button("RUN DIAGNOSTIC ANALYSIS"):
+    # THE FIX: Create a DataFrame with EXACT column names from your notebook
+    # If your notebook used different names, update them here.
+    input_data = pd.DataFrame([{
+        "Age_of_Bridge": age,
+        "Traffic_Volume": traffic,
+        "Material_Type": material,
+        "Maintenance_Level": maintenance
+    }])
+
     try:
-        input_data = {
-            "Age_of_Bridge": age,
-            "Traffic_Volume": traffic,
-            "Material_Type": material,
-            "Maintenance_Level": maintenance
-        }
-        input_df = pd.DataFrame([input_data])
+        # The model pipeline handles scaling/encoding automatically via the DataFrame
+        prediction = model.predict(input_data)
         
-        pred = model.predict(input_df)[0]
-        prob = model.predict_proba(input_df)[0] if hasattr(model, 'predict_proba') else None
+        st.divider()
+        st.subheader("📊 Assessment Result")
         
-        col1, col2 = st.columns([3,1])
-        with col1:
-            status = "🟢 Good Condition" if pred == 0 else "🔴 Poor Condition"
-            st.markdown(f"### **{status}**")
-        with col2:
-            st.metric("Prediction Score", f"{pred}")
-            
-        if prob is not None:
-            st.info(f"**Probabilities:** Good: {prob[0]:.1%} | Poor: {prob[1]:.1%}")
+        # Professional Output Cards
+        if prediction[0] == 1:
+            st.balloons()
+            st.markdown(f"""
+                <div class="result-card" style="background-color: #d1e7dd; border-left: 10px solid #198754;">
+                    <h2 style="color: #0f5132;">✅ STRUCTURAL STATUS: STABLE</h2>
+                    <p style="color: #0f5132; font-size: 1.1em;">
+                        The analysis indicates the bridge is in <b>Good Condition</b>.<br>
+                        Continue with the standard maintenance cycle.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+                <div class="result-card" style="background-color: #f8d7da; border-left: 10px solid #dc3545;">
+                    <h2 style="color: #842029;">⚠️ ALERT: CRITICAL CONDITION</h2>
+                    <p style="color: #842029; font-size: 1.1em;">
+                        The analysis indicates the bridge is in <b>Poor Condition</b>.<br>
+                        <b>Action Required:</b> Immediate physical structural inspection recommended.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
             
     except Exception as e:
-        st.error(f"Prediction failed: {str(e)}")
-        st.info("Check if input columns match training data exactly")
+        st.error(f"Prediction Error: {e}")
+        st.info("Check if column names in app.py match your model's training data.")
